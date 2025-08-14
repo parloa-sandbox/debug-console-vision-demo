@@ -21,9 +21,11 @@ function EventItem({ event }: { event: EventMessage }) {
     'text-yellow-400': event.type === 'AudioFrame2',
     'text-purple-400': event.type === 'ToolCall',
     'text-pink-400': event.type === 'ToolResponse',
+    'text-orange-400': event.type === 'McpToolMessage',
+    'text-indigo-400': event.type === 'AgentToolMessage',
     'text-gray-400': event.type === 'System',
     'text-red-400': event.type === 'Error',
-    'text-cyan-400': !['UserMessage', 'AgentMessage', 'AudioFrame2', 'ToolCall', 'ToolResponse', 'System', 'Error'].includes(event.type),
+    'text-cyan-400': !['UserMessage', 'AgentMessage', 'AudioFrame2', 'ToolCall', 'ToolResponse', 'McpToolMessage', 'AgentToolMessage', 'System', 'Error'].includes(event.type),
   })
 
   const directionIcon = event.direction === 'inbound' ? '→' : '←'

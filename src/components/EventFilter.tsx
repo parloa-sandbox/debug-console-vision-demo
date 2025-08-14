@@ -145,6 +145,11 @@ export const shouldShowEvent = (eventType: string, filters: EventFilters): boole
     return filters.showToolResponses
   }
   
+  // MCP and Agent Tool Messages
+  if (eventTypeLower.includes('mcptoolmessage') || eventTypeLower.includes('agenttoolmessage')) {
+    return filters.showToolCalls
+  }
+  
   // Conversation control
   if (eventTypeLower.includes('conversation') || eventTypeLower.includes('started') || 
       eventTypeLower.includes('ready') || eventTypeLower.includes('interrupt')) {

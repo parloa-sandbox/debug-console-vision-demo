@@ -31,6 +31,8 @@ export const MessageTypeSchema = z.enum([
   'IntermediateAgentMessage',
   'ToolCall',
   'ToolResponse',
+  'McpToolMessage',
+  'AgentToolMessage',
   'Debug',
   'Error',
   'System'
