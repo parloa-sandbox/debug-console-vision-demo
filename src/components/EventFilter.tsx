@@ -13,6 +13,7 @@ export interface EventFilters {
   showConversationControl: boolean
   showUserMessages: boolean
   showPingPong: boolean
+  showErrors: boolean
   showAll: boolean
 }
 
@@ -29,6 +30,7 @@ const EVENT_CATEGORIES = [
   { key: 'showToolResponses' as keyof EventFilters, label: 'Tool Responses', description: 'Results from tool calls' },
   { key: 'showConversationControl' as keyof EventFilters, label: 'Conversation Control', description: 'Start, ready, interrupt events' },
   { key: 'showUserMessages' as keyof EventFilters, label: 'User Messages', description: 'Messages from user' },
+  { key: 'showErrors' as keyof EventFilters, label: 'Errors', description: 'Error events and messages' },
   { key: 'showPingPong' as keyof EventFilters, label: 'Ping/Pong', description: 'Keepalive frames' }
 ]
 
@@ -175,17 +177,23 @@ export const shouldShowEvent = (eventType: string, filters: EventFilters): boole
     return filters.showPingPong
   }
   
+  // Error events
+  if (eventTypeLower.includes('error') || eventType === 'Error') {
+    return filters.showErrors
+  }
+  
   // Default: show unknown events if any filter is active
   return filters.showConversationControl
 }
 
 export const defaultEventFilters: EventFilters = {
   showAll: false,
-  showAudioFrames: true,
+  showAudioFrames: false,
   showAgentMessages: true,
   showToolCalls: true,
   showToolResponses: true,
   showConversationControl: true,
   showUserMessages: true,
+  showErrors: true,
   showPingPong: false
 }

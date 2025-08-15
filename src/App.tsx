@@ -21,6 +21,7 @@ import type {
 function App() {
   const [isConnected, setIsConnected] = useState(false)
   const [isMicActive, setIsMicActive] = useState(false)
+  const [isSoundMuted, setIsSoundMuted] = useState(false)
   const [runtime, setRuntime] = useState<AgentRuntime>('openai')
   const [agent, setAgent] = useState<AgentIdentifier>('retail')
   const [session, setSession] = useState<DebugSession | null>(null)
@@ -48,6 +49,7 @@ function App() {
   const lastAudioFrameRef = useRef<number>(0)
   const audioSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingAgentMessageRef = useRef<string | null>(null)
+  const openaiWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing) return
@@ -257,9 +259,20 @@ function App() {
               }
             }, 4000)
           } else {
-            // For non-Gemini runtimes, use the original behavior
-            console.log(`📧 Scheduler: Agent message received, scheduling next message (currentIndex: ${currentMessageIndexRef.current})`)
-            handleScheduledMessageSend()
+            // For OpenAI runtime, wait 2 seconds before sending next message
+            console.log(`📧 Scheduler: Agent message received (OpenAI mode - waiting 2s before sending)`)
+            pendingAgentMessageRef.current = agentText
+            
+            // Clear any existing OpenAI wait timer
+            if (openaiWaitTimerRef.current) {
+              clearTimeout(openaiWaitTimerRef.current)
+            }
+            
+            // Wait 2 seconds before sending the next scheduled message
+            openaiWaitTimerRef.current = setTimeout(() => {
+              console.log(`📧 Scheduler: Wait complete, sending next message`)
+              handleScheduledMessageSend()
+            }, 2000)
           }
         }
       }
@@ -381,6 +394,9 @@ function App() {
     if (audioSilenceTimerRef.current) {
       clearTimeout(audioSilenceTimerRef.current)
     }
+    if (openaiWaitTimerRef.current) {
+      clearTimeout(openaiWaitTimerRef.current)
+    }
     pendingAgentMessageRef.current = null
     lastAudioFrameRef.current = 0
     lastScheduledSendRef.current = 0
@@ -405,6 +421,13 @@ function App() {
       }
     }
   }, [isConnected, isMicActive])
+
+  const handleToggleMute = useCallback(() => {
+    if (audioPlayerRef.current) {
+      const newMuteState = audioPlayerRef.current.toggleMute()
+      setIsSoundMuted(newMuteState)
+    }
+  }, [])
 
   const handleClearEvents = useCallback(() => {
     setSession(prev => {
@@ -563,11 +586,13 @@ function App() {
       <ControlPanel
         isConnected={isConnected}
         isMicActive={isMicActive}
+        isSoundMuted={isSoundMuted}
         runtime={runtime}
         agent={agent}
         onConnect={handleConnect}
         onDisconnect={handleDisconnect}
         onToggleMic={handleToggleMic}
+        onToggleMute={handleToggleMute}
         onRuntimeChange={setRuntime}
         onAgentChange={setAgent}
         onClearEvents={handleClearEvents}

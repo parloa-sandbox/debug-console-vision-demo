@@ -1,4 +1,4 @@
-import { Mic, MicOff, Phone, PhoneOff, Trash2, Download, Bug } from 'lucide-react'
+import { Mic, MicOff, Phone, PhoneOff, Trash2, Download, Bug, Volume2, VolumeX } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { AgentRuntime, AgentIdentifier, DebugSession } from '@/types'
 import { AgentRuntimeSchema, AgentIdentifierSchema } from '@/types'
@@ -6,11 +6,13 @@ import { AgentRuntimeSchema, AgentIdentifierSchema } from '@/types'
 interface ControlPanelProps {
   isConnected: boolean
   isMicActive: boolean
+  isSoundMuted: boolean
   runtime: AgentRuntime
   agent: AgentIdentifier
   onConnect: () => void
   onDisconnect: () => void
   onToggleMic: () => void
+  onToggleMute: () => void
   onRuntimeChange: (runtime: AgentRuntime) => void
   onAgentChange: (agent: AgentIdentifier) => void
   onClearEvents: () => void
@@ -23,11 +25,13 @@ interface ControlPanelProps {
 export function ControlPanel({
   isConnected,
   isMicActive,
+  isSoundMuted,
   runtime,
   agent,
   onConnect,
   onDisconnect,
   onToggleMic,
+  onToggleMute,
   onRuntimeChange,
   onAgentChange,
   onClearEvents,
@@ -114,6 +118,28 @@ export function ControlPanel({
               <>
                 <MicOff size={16} />
                 Mic Off
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={onToggleMute}
+            className={clsx(
+              'flex items-center gap-2 px-4 py-2 rounded font-medium transition-colors',
+              isSoundMuted
+                ? 'bg-orange-600 hover:bg-orange-700 text-white'
+                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+            )}
+          >
+            {isSoundMuted ? (
+              <>
+                <VolumeX size={16} />
+                Sound Off
+              </>
+            ) : (
+              <>
+                <Volume2 size={16} />
+                Sound On
               </>
             )}
           </button>
