@@ -5,6 +5,50 @@ import type { EventMessage } from '@/types'
 import { clsx } from 'clsx'
 import { EventFilter, shouldShowEvent, type EventFilters } from './EventFilter'
 
+function tryParseJSON(text: string): any {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+function formatPayload(value: any): any {
+  // Handle null/undefined
+  if (value === null || value === undefined) {
+    return value
+  }
+  
+  // Handle strings that might be JSON
+  if (typeof value === 'string') {
+    const parsed = tryParseJSON(value)
+    if (parsed !== value) {
+      // Successfully parsed, now format the result recursively
+      return formatPayload(parsed)
+    }
+    return value
+  }
+  
+  // Handle arrays
+  if (Array.isArray(value)) {
+    return value.map(item => formatPayload(item))
+  }
+  
+  // Handle objects
+  if (typeof value === 'object') {
+    const formatted: any = {}
+    for (const key in value) {
+      if (value.hasOwnProperty(key)) {
+        formatted[key] = formatPayload(value[key])
+      }
+    }
+    return formatted
+  }
+  
+  // Return primitives as-is
+  return value
+}
+
 interface EventViewerProps {
   events: EventMessage[]
   eventFilters?: EventFilters
@@ -19,13 +63,13 @@ function EventItem({ event }: { event: EventMessage }) {
     'text-blue-400': event.type === 'UserMessage',
     'text-green-400': event.type === 'AgentMessage',
     'text-yellow-400': event.type === 'AudioFrame2',
-    'text-purple-400': event.type === 'ToolCall',
-    'text-pink-400': event.type === 'ToolResponse',
+    'text-purple-400': ['ToolCall', 'FunctionCall', 'ToolUse'].includes(event.type),
+    'text-pink-400': ['ToolResponse', 'FunctionResponse', 'ToolCallResult'].includes(event.type),
     'text-orange-400': event.type === 'ToolOutput',
     'text-indigo-400': event.type === 'ToolInput',
     'text-gray-400': event.type === 'System',
     'text-red-400': event.type === 'Error',
-    'text-cyan-400': !['UserMessage', 'AgentMessage', 'AudioFrame2', 'ToolCall', 'ToolResponse', 'ToolOutput', 'ToolInput', 'System', 'Error'].includes(event.type),
+    'text-cyan-400': !['UserMessage', 'AgentMessage', 'AudioFrame2', 'ToolCall', 'ToolResponse', 'ToolOutput', 'ToolInput', 'System', 'Error', 'FunctionCall', 'FunctionResponse', 'ToolUse', 'ToolCallResult'].includes(event.type),
   })
 
   const directionIcon = event.direction === 'inbound' ? '→' : '←'
@@ -59,7 +103,7 @@ function EventItem({ event }: { event: EventMessage }) {
       {expanded && (
         <div className="mt-2 px-8">
           <div className="bg-gray-900 rounded p-3 text-xs font-mono overflow-x-auto">
-            <pre>{JSON.stringify(event.payload, null, 2)}</pre>
+            <pre>{JSON.stringify(formatPayload(event.payload), null, 2)}</pre>
           </div>
           {event.raw !== undefined && event.raw !== null && (
             <details className="mt-2">

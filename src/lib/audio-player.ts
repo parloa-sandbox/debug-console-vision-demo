@@ -1,6 +1,12 @@
 /**
  * Audio player for debug console - handles AudioFrame playback
  * Based on frontend AudioProcessor implementation
+ * 
+ * Audio Format Requirements:
+ * - OpenAI: Flexible, typically 24 kHz output
+ * - Gemini: Strict requirements
+ *   - Input: Raw 16-bit PCM at 16 kHz, little-endian (handled by microphone)
+ *   - Output: Raw 16-bit PCM at 24 kHz, little-endian (handled here)
  */
 
 export interface AudioPlayerConfig {
@@ -27,7 +33,7 @@ export class AudioPlayer {
   private frameCount = 0
   private microphoneActive = false
   private originalVolume = 0.5
-  private sampleRate = 24100 // Hz (remote audio sample rate)
+  private sampleRate = 24000 // Hz (24 kHz for Gemini, standard for other runtimes)
   private bitDepth = 16 // bits per sample
   private channels = 1 // mono output
   private nextPlaybackTime = 0

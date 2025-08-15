@@ -254,6 +254,10 @@ export class DebugWebSocketClient {
           console.log('🔧 Tool call:', innerData.payload?.name)
         } else if (innerData?.name === 'ToolResponse') {
           console.log('📦 Tool response received')
+        } else if (innerData?.name === 'ToolInput') {
+          console.log('📥 Tool input received')
+        } else if (innerData?.name === 'ToolOutput') {
+          console.log('📤 Tool output received')
         }
       }
     })

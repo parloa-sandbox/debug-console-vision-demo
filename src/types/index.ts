@@ -33,6 +33,10 @@ export const MessageTypeSchema = z.enum([
   'ToolResponse',
   'ToolOutput',
   'ToolInput',
+  'ToolUse',
+  'FunctionCall',
+  'FunctionResponse',
+  'ToolCallResult',
   'Debug',
   'Error',
   'System'
@@ -75,6 +79,21 @@ export interface ToolResponse {
   timestamp: number
 }
 
+export interface ToolInput {
+  id: string
+  toolName: string
+  input: unknown
+  timestamp: number
+}
+
+export interface ToolOutput {
+  id: string
+  toolName: string
+  output: unknown
+  error?: string
+  timestamp: number
+}
+
 export interface DebugSession {
   id: string
   startTime: number
@@ -84,4 +103,6 @@ export interface DebugSession {
   events: EventMessage[]
   toolCalls: ToolCall[]
   toolResponses: ToolResponse[]
+  toolInputs: ToolInput[]
+  toolOutputs: ToolOutput[]
 }

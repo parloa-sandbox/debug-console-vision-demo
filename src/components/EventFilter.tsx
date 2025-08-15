@@ -141,7 +141,16 @@ export const shouldShowEvent = (eventType: string, filters: EventFilters): boole
   if (eventTypeLower.includes('tool') && eventTypeLower.includes('call')) {
     return filters.showToolCalls
   }
+  if (eventTypeLower.includes('function') && eventTypeLower.includes('call')) {
+    return filters.showToolCalls
+  }
+  if (eventTypeLower === 'tooluse') {
+    return filters.showToolCalls
+  }
   if (eventTypeLower.includes('tool') && (eventTypeLower.includes('response') || eventTypeLower.includes('result'))) {
+    return filters.showToolResponses
+  }
+  if (eventTypeLower.includes('function') && eventTypeLower.includes('response')) {
     return filters.showToolResponses
   }
   
