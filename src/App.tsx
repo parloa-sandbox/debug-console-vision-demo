@@ -27,14 +27,14 @@ function App() {
   const [eventFilters, setEventFilters] = useState<EventFilters>(defaultEventFilters)
   const [schedulerEnabled, setSchedulerEnabled] = useState(false)
   const [scheduledMessages, setScheduledMessages] = useState<ScheduledMessage[]>([
-    { text: "What's the weather like today?" },
-    { text: "Can you help me book a flight?", delay: 1000 },
-    { text: "I need a hotel in Paris" },
-    { text: "What are the best restaurants there?" }
+    { text: "I am searching for a black suit. can you show me some options?", delay: 1000 },
+    { text: "Do you have any in size 42?", delay: 1000 },
+    { text: "What about blue suits?", delay: 1000 },
+    { text: "Thank you, that's all I need", delay: 1000 }
   ])
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
   const [schedulerCompleted, setSchedulerCompleted] = useState(false)
-  const [sidebarWidth, setSidebarWidth] = useState(384) // Default width (w-96)
+  const [sidebarWidth, setSidebarWidth] = useState(460) // Default width (20% wider than original)
   const [isResizing, setIsResizing] = useState(false)
   
   const wsClientRef = useRef<DebugWebSocketClient | null>(null)
@@ -119,8 +119,9 @@ function App() {
     const messageToSend = messages[currentIdx]
     
     if (messageToSend) {
-      const delay = Math.max(1500, messageToSend.delay || 0) // Minimum 1.5s delay
-      console.log(`📧 Scheduler: Will send message ${currentIdx + 1}/${messages.length} after ${delay}ms delay`)
+      // Add 4 seconds to the configured delay for safety
+      const delay = Math.max(4000, (messageToSend.delay || 0) + 4000) // Minimum 4s delay, plus 4s safety
+      console.log(`📧 Scheduler: Will send message ${currentIdx + 1}/${messages.length} after ${delay}ms delay (includes 4s safety delay)`)
       
       schedulerCooldownRef.current = setTimeout(() => {
         if (wsClientRef.current && wsClientRef.current.getConnectionStatus() && schedulerEnabledRef.current) {
@@ -146,8 +147,13 @@ function App() {
             setSchedulerEnabled(false)
             setSchedulerCompleted(true)
             setCurrentMessageIndex(0)
+            // Auto-disconnect when scheduling completes
+            setTimeout(() => {
+              handleDisconnect()
+            }, 500)
           } else {
             setCurrentMessageIndex(nextIdx)
+            currentMessageIndexRef.current = nextIdx
           }
         }
       }, delay)
@@ -198,6 +204,11 @@ function App() {
     client.on('debug_event', (data: unknown) => {
       const event = data as EventMessage
       
+      // Log ConversationStarted for debugging
+      if (event.type === 'ConversationStarted') {
+        console.log('🎬 ConversationStarted event received')
+      }
+      
       // Handle audio frames for playback
       if ((event.type === 'AudioFrame' || event.type === 'AudioFrame2') && event.payload && audioPlayerRef.current) {
         const audioChunk = (event.payload as any).chunk
@@ -219,9 +230,9 @@ function App() {
           const now = Date.now()
           const timeSinceLastSend = now - lastScheduledSendRef.current
           
-          // Prevent sending if less than 3 seconds since last scheduled send
-          if (timeSinceLastSend < 3000) {
-            console.log('⏸️ Scheduler: Skipping - cooldown period (3s)')
+          // Prevent sending if less than 5 seconds since last scheduled send (to account for 4s safety delay)
+          if (timeSinceLastSend < 5000) {
+            console.log(`⏸️ Scheduler: Skipping - cooldown period (${timeSinceLastSend}ms since last send, need 5000ms)`)
             return
           }
           
@@ -235,19 +246,19 @@ function App() {
               clearTimeout(audioSilenceTimerRef.current)
             }
             
-            // Start/restart the 2-second audio silence timer
+            // Start/restart the 4-second audio silence timer for safety
             audioSilenceTimerRef.current = setTimeout(() => {
               const timeSinceLastAudio = Date.now() - lastAudioFrameRef.current
               console.log(`📧 Scheduler: Audio silence detected (${timeSinceLastAudio}ms since last audio)`)
               
-              // If we have a pending agent message and enough time has passed
-              if (pendingAgentMessageRef.current && timeSinceLastAudio >= 2000) {
+              // If we have a pending agent message and enough time has passed (4s safety)
+              if (pendingAgentMessageRef.current && timeSinceLastAudio >= 4000) {
                 handleScheduledMessageSend()
               }
-            }, 2000)
+            }, 4000)
           } else {
             // For non-Gemini runtimes, use the original behavior
-            console.log('📧 Scheduler: Agent message received, scheduling next message')
+            console.log(`📧 Scheduler: Agent message received, scheduling next message (currentIndex: ${currentMessageIndexRef.current})`)
             handleScheduledMessageSend()
           }
         }
@@ -360,6 +371,8 @@ function App() {
     setIsConnected(false)
     setIsMicActive(false)
     setSchedulerEnabled(false)
+    setCurrentMessageIndex(0)
+    currentMessageIndexRef.current = 0
     micManagerRef.current?.stop()
     audioPlayerRef.current?.setMicrophoneActive(false)
     if (schedulerCooldownRef.current) {
@@ -370,6 +383,7 @@ function App() {
     }
     pendingAgentMessageRef.current = null
     lastAudioFrameRef.current = 0
+    lastScheduledSendRef.current = 0
   }, [])
 
   const handleToggleMic = useCallback(async () => {
@@ -440,9 +454,9 @@ function App() {
     const now = Date.now()
     const timeSinceLastSend = now - lastScheduledSendRef.current
     
-    // Prevent sending if less than 1 second since last scheduled send
-    if (timeSinceLastSend < 1000) {
-      console.log('⏸️ Scheduler: Manual trigger blocked - cooldown period')
+    // Prevent sending if less than 2 seconds since last scheduled send (manual has shorter cooldown)
+    if (timeSinceLastSend < 2000) {
+      console.log(`⏸️ Scheduler: Manual trigger blocked - cooldown period (${timeSinceLastSend}ms since last send, need 2000ms)`)
       return
     }
     
@@ -474,11 +488,75 @@ function App() {
         setSchedulerEnabled(false)
         setSchedulerCompleted(true)
         setCurrentMessageIndex(0)
+        // Auto-disconnect when scheduling completes
+        setTimeout(() => {
+          handleDisconnect()
+        }, 500)
       } else {
         setCurrentMessageIndex(nextIdx)
+        currentMessageIndexRef.current = nextIdx
       }
     }
-  }, [isConnected, schedulerEnabled])
+  }, [isConnected, schedulerEnabled, handleDisconnect])
+
+  const handleDebugMode = useCallback(() => {
+    if (!isConnected) {
+      // First connect
+      handleConnect()
+      // Then enable scheduler after a short delay
+      setTimeout(() => {
+        setSchedulerEnabled(true)
+        setCurrentMessageIndex(0)
+        setSchedulerCompleted(false)
+        // Update the ref immediately since state update is async
+        schedulerEnabledRef.current = true
+        console.log('🐛 Debug mode: Connected and scheduler enabled')
+        // Wait longer for conversation to be fully ready
+        setTimeout(() => {
+          // Double-check we're connected before sending
+          if (wsClientRef.current && wsClientRef.current.getConnectionStatus()) {
+            const messages = scheduledMessagesRef.current
+            const messageToSend = messages[0]
+            if (messageToSend) {
+              console.log(`🐛 Debug mode: Sending first message: "${messageToSend.text}"`)
+              console.log('🐛 Debug mode: WebSocket status:', {
+                connected: wsClientRef.current.getConnectionStatus(),
+                schedulerEnabled: schedulerEnabledRef.current,
+                messageCount: messages.length
+              })
+              wsClientRef.current.sendMessage(messageToSend.text)
+              lastScheduledSendRef.current = Date.now()
+              
+              // Add the sent message to the event log
+              const event: EventMessage = {
+                id: crypto.randomUUID(),
+                timestamp: Date.now(),
+                type: 'UserMessage',
+                direction: 'outbound',
+                payload: { text: messageToSend.text, scheduled: true },
+                raw: { text: messageToSend.text, scheduled: true }
+              }
+              setSession(prev => prev ? { ...prev, events: [...prev.events, event] } : prev)
+              
+              // Move to next message if there are more
+              if (messages.length > 1) {
+                setCurrentMessageIndex(1)
+                currentMessageIndexRef.current = 1
+              } else {
+                // If only one message, mark scheduler as completed
+                setSchedulerEnabled(false)
+                setSchedulerCompleted(true)
+                setCurrentMessageIndex(0)
+                currentMessageIndexRef.current = 0
+              }
+            }
+          } else {
+            console.log('🐛 Debug mode: WebSocket not ready yet, skipping first message')
+          }
+        }, 3000) // Wait 3 seconds for conversation to be ready
+      }, 1500) // Wait 1.5 seconds after connection
+    }
+  }, [isConnected, handleConnect])
 
   return (
     <div className={`h-screen flex flex-col bg-gray-950 ${isResizing ? 'select-none' : ''}`}>
@@ -495,6 +573,7 @@ function App() {
         onClearEvents={handleClearEvents}
         onExportSession={handleExportSession}
         onSendMessage={handleSendMessage}
+        onDebugMode={handleDebugMode}
         session={session}
       />
       
@@ -525,6 +604,7 @@ function App() {
               const newEnabled = !schedulerEnabled
               setSchedulerEnabled(newEnabled)
               setCurrentMessageIndex(0)
+              currentMessageIndexRef.current = 0
               setSchedulerCompleted(false)
               console.log('📧 Scheduler:', newEnabled ? 'Enabled' : 'Disabled')
               
@@ -539,6 +619,11 @@ function App() {
             onMessagesChange={(messages) => {
               setScheduledMessages(messages)
               setSchedulerCompleted(false)
+              // Reset index if it's beyond the new message count
+              if (currentMessageIndex >= messages.length) {
+                setCurrentMessageIndex(0)
+                currentMessageIndexRef.current = 0
+              }
             }}
             currentMessageIndex={currentMessageIndex}
             onManualTrigger={handleManualSchedulerTrigger}

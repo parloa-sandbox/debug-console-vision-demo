@@ -1,4 +1,4 @@
-import { Mic, MicOff, Phone, PhoneOff, Trash2, Download } from 'lucide-react'
+import { Mic, MicOff, Phone, PhoneOff, Trash2, Download, Bug } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { AgentRuntime, AgentIdentifier, DebugSession } from '@/types'
 import { AgentRuntimeSchema, AgentIdentifierSchema } from '@/types'
@@ -16,6 +16,7 @@ interface ControlPanelProps {
   onClearEvents: () => void
   onExportSession: (session: DebugSession) => void
   onSendMessage: (text: string) => void
+  onDebugMode: () => void
   session: DebugSession | null
 }
 
@@ -32,6 +33,7 @@ export function ControlPanel({
   onClearEvents,
   onExportSession,
   onSendMessage,
+  onDebugMode,
   session,
 }: ControlPanelProps) {
   const handleExport = () => {
@@ -63,6 +65,19 @@ export function ControlPanel({
                 Connect
               </>
             )}
+          </button>
+
+          <button
+            onClick={onDebugMode}
+            disabled={isConnected}
+            className={clsx(
+              'flex items-center gap-2 px-4 py-2 rounded font-medium transition-colors',
+              'bg-purple-600 hover:bg-purple-700 text-white',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+          >
+            <Bug size={16} />
+            Debug
           </button>
 
           <input

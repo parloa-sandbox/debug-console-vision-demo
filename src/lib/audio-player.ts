@@ -3,10 +3,10 @@
  * Based on frontend AudioProcessor implementation
  * 
  * Audio Format Requirements:
- * - OpenAI: Flexible, typically 24 kHz output
- * - Gemini: Strict requirements
- *   - Input: Raw 16-bit PCM at 16 kHz, little-endian (handled by microphone)
- *   - Output: Raw 16-bit PCM at 24 kHz, little-endian (handled here)
+ * - OpenAI: Raw 16-bit PCM at 24.1 kHz, little-endian
+ * - Gemini: Raw 16-bit PCM at 24.1 kHz, little-endian (strict requirements)
+ *   - Input: Raw 16-bit PCM at 16 kHz (handled by microphone)
+ *   - Output: Raw 16-bit PCM at 24.1 kHz (handled here)
  */
 
 export interface AudioPlayerConfig {
@@ -33,7 +33,7 @@ export class AudioPlayer {
   private frameCount = 0
   private microphoneActive = false
   private originalVolume = 0.5
-  private sampleRate = 24000 // Hz (24 kHz for Gemini, standard for other runtimes)
+  private sampleRate = 24100 // Hz (24.1 kHz - required for both Gemini and OpenAI)
   private bitDepth = 16 // bits per sample
   private channels = 1 // mono output
   private nextPlaybackTime = 0
@@ -110,15 +110,12 @@ export class AudioPlayer {
       }
 
       const now = this.audioContext.currentTime
-      // Use more conservative scheduling to improve audio quality
-      if (this.nextPlaybackTime < now + 0.05) this.nextPlaybackTime = now + 0.05
+      if (this.nextPlaybackTime < now) this.nextPlaybackTime = now
 
-      // Schedule the audio with small gap to prevent audio artifacts
+      // Schedule the audio for continuous playback
       src.start(this.nextPlaybackTime)
-      this.nextPlaybackTime += audioBuffer.duration + 0.01 // Small gap between chunks
+      this.nextPlaybackTime += audioBuffer.duration
       this.frameCount++
-      
-      console.log(`🔊 Played audio chunk ${this.frameCount} (${audioBuffer.duration.toFixed(3)}s)`)
       return true
     } catch (error) {
       console.error('❌ Audio playback failed:', error)
