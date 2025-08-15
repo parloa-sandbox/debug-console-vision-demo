@@ -145,8 +145,8 @@ export const shouldShowEvent = (eventType: string, filters: EventFilters): boole
     return filters.showToolResponses
   }
   
-  // MCP and Agent Tool Messages
-  if (eventTypeLower.includes('mcptoolmessage') || eventTypeLower.includes('agenttoolmessage')) {
+  // Tool Input and Output Messages
+  if (eventTypeLower.includes('tooloutput') || eventTypeLower.includes('toolinput')) {
     return filters.showToolCalls
   }
   
