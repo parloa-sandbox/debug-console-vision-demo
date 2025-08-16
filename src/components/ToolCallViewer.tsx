@@ -75,6 +75,26 @@ function ToolCallItem({
     pending: <Clock size={16} className="text-yellow-400 animate-pulse" />,
   }[status]
 
+  // Calculate latencies between inputs and outputs
+  const latencies = inputs.map(input => {
+    const matchingOutput = outputs.find(output => 
+      output.timestamp > input.timestamp && 
+      output.toolName === input.toolName
+    )
+    if (matchingOutput) {
+      return {
+        inputId: input.id,
+        outputId: matchingOutput.id,
+        latency: matchingOutput.timestamp - input.timestamp
+      }
+    }
+    return null
+  }).filter(Boolean)
+
+  const avgLatency = latencies.length > 0 
+    ? Math.round(latencies.reduce((sum, l) => sum + l.latency, 0) / latencies.length)
+    : null
+
   return (
     <div className="border-b border-gray-800 py-3">
       <div
@@ -85,6 +105,11 @@ function ToolCallItem({
         {statusIcon}
         <span className="font-medium text-purple-300">{call.name}</span>
         <span className="text-gray-600 text-xs font-mono ml-2">#{call.id.slice(0, 8)}</span>
+        {avgLatency !== null && (
+          <span className="text-blue-400 text-xs font-mono ml-2">
+            {avgLatency}ms avg
+          </span>
+        )}
         <span className="text-gray-500 text-xs font-mono ml-auto">
           {format(call.timestamp, 'HH:mm:ss.SSS')}
         </span>
@@ -114,16 +139,24 @@ function ToolCallItem({
           {inputs.length > 0 && (
             <div>
               <h4 className="text-xs text-gray-400 mb-1">Tool Inputs ({inputs.length})</h4>
-              {inputs.map((input) => (
-                <div key={input.id} className="mb-2">
-                  <div className="text-xs text-gray-500 mb-1">
-                    {format(input.timestamp, 'HH:mm:ss.SSS')}
+              {inputs.map((input) => {
+                const latencyInfo = latencies.find(l => l.inputId === input.id)
+                return (
+                  <div key={input.id} className="mb-2">
+                    <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                      <span>{format(input.timestamp, 'HH:mm:ss.SSS')}</span>
+                      {latencyInfo && (
+                        <span className="text-blue-400">
+                          → {latencyInfo.latency}ms latency
+                        </span>
+                      )}
+                    </div>
+                    <div className="bg-indigo-950 rounded p-3 text-xs font-mono overflow-x-auto">
+                      <pre>{JSON.stringify(formatValue(input.input), null, 2)}</pre>
+                    </div>
                   </div>
-                  <div className="bg-indigo-950 rounded p-3 text-xs font-mono overflow-x-auto">
-                    <pre>{JSON.stringify(formatValue(input.input), null, 2)}</pre>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
           {outputs.length > 0 && (
@@ -172,6 +205,25 @@ export function ToolCallViewer({ toolCalls, toolResponses, toolInputs, toolOutpu
     return { inputs: relatedInputs, outputs: relatedOutputs }
   }
 
+  // Calculate overall latency statistics
+  const allLatencies: number[] = []
+  toolInputs.forEach(input => {
+    const matchingOutput = toolOutputs.find(output => 
+      output.timestamp > input.timestamp && 
+      output.toolName === input.toolName
+    )
+    if (matchingOutput) {
+      allLatencies.push(matchingOutput.timestamp - input.timestamp)
+    }
+  })
+
+  const latencyStats = allLatencies.length > 0 ? {
+    avg: Math.round(allLatencies.reduce((sum, l) => sum + l, 0) / allLatencies.length),
+    min: Math.round(Math.min(...allLatencies)),
+    max: Math.round(Math.max(...allLatencies)),
+    count: allLatencies.length
+  } : null
+
   return (
     <div className="flex flex-col h-full">
       <div className="border-b border-gray-800 p-3">
@@ -180,6 +232,11 @@ export function ToolCallViewer({ toolCalls, toolResponses, toolInputs, toolOutpu
         </h3>
         <div className="text-xs text-gray-500 mt-1">
           Inputs: {toolInputs.length} | Outputs: {toolOutputs.length}
+          {latencyStats && (
+            <span className="text-blue-400 ml-2">
+              | Latency: {latencyStats.avg}ms avg ({latencyStats.min}-{latencyStats.max}ms)
+            </span>
+          )}
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">

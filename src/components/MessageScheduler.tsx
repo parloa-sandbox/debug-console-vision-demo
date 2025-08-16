@@ -180,7 +180,7 @@ export function MessageScheduler({
             <div className="text-xs text-gray-500 space-y-1">
               <p>• Messages will be sent automatically after each non-empty agent response</p>
               {runtime === 'gemini' && (
-                <p className="text-blue-400">• Gemini mode: Waits 4 seconds after audio stops before sending</p>
+                <p className="text-blue-400">• Gemini mode: Waits 2 seconds after audio stops before sending</p>
               )}
               {runtime === 'openai' && (
                 <p className="text-blue-400">• OpenAI mode: Waits 2 seconds after response before sending</p>
@@ -191,7 +191,7 @@ export function MessageScheduler({
                 <p className="text-yellow-400 mt-2">
                   ⚡ Scheduler is active - {isConnected ? 
                     runtime === 'gemini' ? 
-                      'waiting for audio silence before sending messages' : 
+                      'waiting 2s after audio silence before sending messages' : 
                       'waiting 2s after responses before sending messages'
                     : 'connect to start'}
                 </p>

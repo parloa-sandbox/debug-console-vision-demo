@@ -50,6 +50,8 @@ function App() {
   const audioSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingAgentMessageRef = useRef<string | null>(null)
   const openaiWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastProcessedAgentMessageRef = useRef<string | null>(null)
+  const waitingForAgentResponseRef = useRef<boolean>(false)
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing) return
@@ -111,54 +113,44 @@ function App() {
   }, [runtime])
 
   const handleScheduledMessageSend = () => {
-    // Clear any existing scheduled send
-    if (schedulerCooldownRef.current) {
-      clearTimeout(schedulerCooldownRef.current)
-    }
-    
     const currentIdx = currentMessageIndexRef.current
     const messages = scheduledMessagesRef.current
     const messageToSend = messages[currentIdx]
     
-    if (messageToSend) {
-      // Add 4 seconds to the configured delay for safety
-      const delay = Math.max(4000, (messageToSend.delay || 0) + 4000) // Minimum 4s delay, plus 4s safety
-      console.log(`📧 Scheduler: Will send message ${currentIdx + 1}/${messages.length} after ${delay}ms delay (includes 4s safety delay)`)
-      
-      schedulerCooldownRef.current = setTimeout(() => {
-        if (wsClientRef.current && wsClientRef.current.getConnectionStatus() && schedulerEnabledRef.current) {
-          wsClientRef.current.sendMessage(messageToSend.text)
-          lastScheduledSendRef.current = Date.now()
-          
-          // Add the sent message to the event log
-          const sentEvent: EventMessage = {
-            id: crypto.randomUUID(),
-            timestamp: Date.now(),
-            type: 'UserMessage',
-            direction: 'outbound',
-            payload: { text: messageToSend.text, scheduled: true },
-            raw: { text: messageToSend.text, scheduled: true }
-          }
-          setSession(prev => prev ? { ...prev, events: [...prev.events, sentEvent] } : prev)
-          
-          // Move to next message
-          const nextIdx = currentIdx + 1
-          if (nextIdx >= messages.length) {
-            // All messages sent - stop scheduler
-            console.log('📧 Scheduler: All messages sent, stopping')
-            setSchedulerEnabled(false)
-            setSchedulerCompleted(true)
-            setCurrentMessageIndex(0)
-            // Auto-disconnect when scheduling completes
-            setTimeout(() => {
-              handleDisconnect()
-            }, 500)
-          } else {
-            setCurrentMessageIndex(nextIdx)
-            currentMessageIndexRef.current = nextIdx
-          }
-        }
-      }, delay)
+    if (!messageToSend || !wsClientRef.current || !wsClientRef.current.getConnectionStatus() || !schedulerEnabledRef.current) {
+      return
+    }
+    
+    // Send the message immediately - delay is already handled by the caller
+    console.log(`📧 Scheduler: Sending message ${currentIdx + 1}/${messages.length}: "${messageToSend.text}"`)
+    wsClientRef.current.sendMessage(messageToSend.text)
+    lastScheduledSendRef.current = Date.now()
+    waitingForAgentResponseRef.current = true
+    
+    // Add the sent message to the event log
+    const sentEvent: EventMessage = {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      type: 'UserMessage',
+      direction: 'outbound',
+      payload: { text: messageToSend.text, scheduled: true },
+      raw: { text: messageToSend.text, scheduled: true }
+    }
+    setSession(prev => prev ? { ...prev, events: [...prev.events, sentEvent] } : prev)
+    
+    // Move to next message
+    const nextIdx = currentIdx + 1
+    if (nextIdx >= messages.length) {
+      // All messages sent - stop scheduler
+      console.log('📧 Scheduler: All messages sent, stopping')
+      setSchedulerEnabled(false)
+      setSchedulerCompleted(true)
+      setCurrentMessageIndex(0)
+      currentMessageIndexRef.current = 0
+      // Don't auto-disconnect - let user maintain control
+    } else {
+      setCurrentMessageIndex(nextIdx)
+      currentMessageIndexRef.current = nextIdx
     }
     
     // Clear pending agent message
@@ -227,16 +219,35 @@ function App() {
       // Handle automatic message scheduling with runtime-specific behavior
       if (event.type === 'AgentMessage' && event.payload && schedulerEnabledRef.current) {
         const agentText = (event.payload as any).text
-        // Only process non-empty messages with at least 10 characters
-        if (agentText && typeof agentText === 'string' && agentText.trim().length > 10) {
+        const messageId = (event.payload as any).id || event.id
+        console.log(`📧 Scheduler: Received AgentMessage with text: "${agentText || '(empty)'}" at index ${currentMessageIndexRef.current}, waiting=${waitingForAgentResponseRef.current}`)
+        
+        // Only process if we're actually waiting for an agent response
+        if (!waitingForAgentResponseRef.current) {
+          console.log(`📧 Scheduler: Not waiting for agent response, skipping`)
+          return
+        }
+        
+        // Skip if we've already processed this exact message
+        if (lastProcessedAgentMessageRef.current === messageId) {
+          console.log(`📧 Scheduler: Skipping duplicate agent message`)
+          return
+        }
+        
+        // Only process non-empty messages
+        if (agentText && typeof agentText === 'string' && agentText.trim().length > 0) {
+          waitingForAgentResponseRef.current = false // Reset the waiting flag
           const now = Date.now()
           const timeSinceLastSend = now - lastScheduledSendRef.current
           
-          // Prevent sending if less than 5 seconds since last scheduled send (to account for 4s safety delay)
-          if (timeSinceLastSend < 5000) {
-            console.log(`⏸️ Scheduler: Skipping - cooldown period (${timeSinceLastSend}ms since last send, need 5000ms)`)
+          // Prevent sending if less than 2 seconds since last scheduled send
+          if (timeSinceLastSend < 2000) {
+            console.log(`⏸️ Scheduler: Skipping - cooldown period (${timeSinceLastSend}ms since last send, need 2000ms)`)
             return
           }
+          
+          // Mark this message as processed
+          lastProcessedAgentMessageRef.current = messageId
           
           // For Gemini runtime, store the agent message and wait for audio silence
           if (runtime === 'gemini') {
@@ -248,16 +259,16 @@ function App() {
               clearTimeout(audioSilenceTimerRef.current)
             }
             
-            // Start/restart the 4-second audio silence timer for safety
+            // Start/restart the 2-second audio silence timer
             audioSilenceTimerRef.current = setTimeout(() => {
               const timeSinceLastAudio = Date.now() - lastAudioFrameRef.current
               console.log(`📧 Scheduler: Audio silence detected (${timeSinceLastAudio}ms since last audio)`)
               
-              // If we have a pending agent message and enough time has passed (4s safety)
-              if (pendingAgentMessageRef.current && timeSinceLastAudio >= 4000) {
+              // If we have a pending agent message and enough time has passed (2s)
+              if (pendingAgentMessageRef.current && timeSinceLastAudio >= 2000) {
                 handleScheduledMessageSend()
               }
-            }, 4000)
+            }, 2000)
           } else {
             // For OpenAI runtime, wait 2 seconds before sending next message
             console.log(`📧 Scheduler: Agent message received (OpenAI mode - waiting 2s before sending)`)
@@ -272,8 +283,12 @@ function App() {
             openaiWaitTimerRef.current = setTimeout(() => {
               console.log(`📧 Scheduler: Wait complete, sending next message`)
               handleScheduledMessageSend()
-            }, 2000)
+            }, 4000)
           }
+        } else {
+          // Log when empty messages are received
+          console.log('📧 Scheduler: Ignoring empty agent message while waiting for response')
+          // Don't reset waitingForAgentResponseRef - continue waiting for a real response
         }
       }
       
@@ -386,6 +401,8 @@ function App() {
     setSchedulerEnabled(false)
     setCurrentMessageIndex(0)
     currentMessageIndexRef.current = 0
+    waitingForAgentResponseRef.current = false
+    lastProcessedAgentMessageRef.current = null
     micManagerRef.current?.stop()
     audioPlayerRef.current?.setMicrophoneActive(false)
     if (schedulerCooldownRef.current) {
@@ -474,6 +491,12 @@ function App() {
   const handleManualSchedulerTrigger = useCallback(() => {
     if (!wsClientRef.current || !isConnected || !schedulerEnabled) return
     
+    // Don't send if we're already waiting for a response
+    if (waitingForAgentResponseRef.current) {
+      console.log(`⏸️ Scheduler: Manual trigger blocked - already waiting for agent response`)
+      return
+    }
+    
     const now = Date.now()
     const timeSinceLastSend = now - lastScheduledSendRef.current
     
@@ -491,6 +514,7 @@ function App() {
       console.log(`📧 Scheduler: Manually sending message ${currentIdx + 1}/${messages.length}`)
       wsClientRef.current.sendMessage(messageToSend.text)
       lastScheduledSendRef.current = now
+      waitingForAgentResponseRef.current = true
       
       // Add the sent message to the event log
       const event: EventMessage = {
@@ -549,6 +573,7 @@ function App() {
               })
               wsClientRef.current.sendMessage(messageToSend.text)
               lastScheduledSendRef.current = Date.now()
+              waitingForAgentResponseRef.current = true
               
               // Add the sent message to the event log
               const event: EventMessage = {
@@ -561,10 +586,11 @@ function App() {
               }
               setSession(prev => prev ? { ...prev, events: [...prev.events, event] } : prev)
               
-              // Move to next message if there are more
+              // Move to next message since we just sent the first one
               if (messages.length > 1) {
                 setCurrentMessageIndex(1)
                 currentMessageIndexRef.current = 1
+                console.log('🐛 Debug mode: Advanced to message index 1')
               } else {
                 // If only one message, mark scheduler as completed
                 setSchedulerEnabled(false)
